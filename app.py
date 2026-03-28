@@ -136,5 +136,3 @@ if __name__ == '__main__':
     # 在本機執行時，監聽所有 IP 的 8080 埠
     app.run(host='0.0.0.0', port=8080, debug=True)
 
-
-
