@@ -2,4 +2,4 @@ Flask
 gTTS
 pydub
 gunicorn
-
+pyaudioop
