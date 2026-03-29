@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日語學習音訊生成器</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; margin: 0 auto; max-width: 800px; padding: 20px; background-color: #f9f9f9; }
+        h1 { text-align: center; color: #333; }
+        textarea { width: 100%; box-sizing: border-box; height: 200px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; }
+        .controls, .player-container { margin-top: 20px; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="number"] { width: 60px; padding: 5px; }
+        button { display: block; width: 100%; padding: 12px; font-size: 18px; font-weight: bold; color: #fff; background-color: #007bff; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; }
+        button:disabled { background-color: #aaa; cursor: not-allowed; }
+        button:hover:not(:disabled) { background-color: #0056b3; }
+        #status { margin-top: 20px; text-align: center; font-weight: bold; color: #555; height: 2em; }
+        #lyric-display { font-size: 28px; text-align: center; min-height: 100px; padding: 20px; color: #111; font-weight: 500; }
+        audio { width: 100%; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>日語學習音訊生成器</h1>
+    <div class="controls">
+        <div class="input-group">
+            <label for="text-content">貼上學習內容 (格式：中文換行、日文換行、例句換行)</label>
+            <textarea id="text-content" placeholder="例：&#10;散步&#10;さんぽ&#10;天気がいいので、公園を散歩しました。（天氣很好，所以去公園散步了。）"></textarea>
+        </div>
+        <div class="input-group">
+            <label for="word-repeats">日文單字重複次數：</label>
+            <input type="number" id="word-repeats" value="3" min="1">
+        </div>
+        <div class="input-group">
+            <label for="sentence-repeats">日文例句重複次數：</label>
+            <input type="number" id="sentence-repeats" value="1" min="1">
+        </div>
+        <button id="generate-btn">生成音訊</button>
+    </div>
+    <div id="status"></div>
+    <div id="player" class="player-container" style="display: none;">
+        <div id="lyric-display">準備播放...</div>
+        <audio id="audio-player" controls></audio>
+    </div>
+
+    <script>
+        const generateBtn = document.getElementById('generate-btn');
+        const textContent = document.getElementById('text-content');
+        const wordRepeats = document.getElementById('word-repeats');
+        const sentenceRepeats = document.getElementById('sentence-repeats');
+        const statusDiv = document.getElementById('status');
+        const playerDiv = document.getElementById('player');
+        const audioPlayer = document.getElementById('audio-player');
+        const lyricDisplay = document.getElementById('lyric-display');
+
+        let lrcData = [];
+
+        generateBtn.addEventListener('click', async () => {
+            generateBtn.disabled = true;
+            statusDiv.textContent = '正在生成音訊，雲端主機需要一點時間...';
+            playerDiv.style.display = 'none';
+
+            const dataToSend = {
+                content: textContent.value,
+                word_repeats: wordRepeats.value,
+                sentence_repeats: sentenceRepeats.value
+            };
+
+            try {
+                const response = await fetch('/generate_audio', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(dataToSend)
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.status === 'success') {
+                    statusDiv.textContent = '生成成功！';
+                    playerDiv.style.display = 'block';
+                    audioPlayer.src = result.mp3_url;
+                    parseLRC(result.lrc_data);
+                    audioPlayer.play();
+                } else {
+                    throw new Error(result.error || '未知的伺服器錯誤');
+                }
+            } catch (error) {
+                statusDiv.textContent = `生成失敗：${error.message}`;
+            } finally {
+                generateBtn.disabled = false;
+            }
+        });
+
+        function parseLRC(lrcText) {
+            lrcData = [];
+            if (!lrcText) return;
+            const lines = lrcText.split('\n');
+            const regex = /\[(\d{2}):(\d{2})\.(\d{2})\](.*)/;
+            for (const line of lines) {
+                const match = line.match(regex);
+                if (match) {
+                    const time = parseInt(match[1], 10) * 60 + parseInt(match[2], 10) + parseInt(match[3], 10) / 100;
+                    const text = match[4].trim();
+                    lrcData.push({ time, text });
+                }
+            }
+        }
+
+        audioPlayer.addEventListener('timeupdate', () => {
+            if (lrcData.length === 0) return;
+            const currentTime = audioPlayer.currentTime;
+            let currentLyric = "";
+            for (let i = 0; i < lrcData.length; i++) {
+                if (currentTime >= lrcData[i].time) {
+                    currentLyric = lrcData[i].text;
+                } else {
+                    break;
+                }
+            }
+            if (lyricDisplay.textContent !== currentLyric) {
+                lyricDisplay.textContent = currentLyric || '...';
+            }
+        });
+    </script>
+</body>
+</html>
